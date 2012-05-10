@@ -3,6 +3,13 @@
   <head>
     <meta charset="UTF-8">
     <title>dstatAggregator</title>
+    <style type="text/css">
+      table, th, td {
+        border: 1px solid gray;
+        border-collapse: collapse;
+        padding: 2px 4px;
+      }
+    </style>
   </head>
   <body>
     <h1>dstatAggregator</h1>
@@ -17,41 +24,85 @@
     <form action="rrds2graphs.php" method="post">
       <fieldset>
         <legend>グラフ作成</legend>
+        <table>
+          <tr>
+            <th>id</th>
+            <th>rrd_name</th>
+            <th>hostname</th>
+            <th>start_time</th>
+            <th>duration</th>
+            <th>disk</th>
+            <th>net</th>
+            <th>created_at</th>
+          </tr>
 <?php
-error_reporting(E_ALL|E_STRICT);
-$rrds_dir = 'rrds';
-$rrd_list = array();
+$conn = new mysqli('localhost', 'rstat', 'rstat', 'rstat');
 
-if ($handle = opendir($rrds_dir)) {
-    while (false !== ($rrd_file = readdir($handle))) {
-        if (preg_match('/\.rrd$/', $rrd_file)) {
-            array_push($rrd_list, $rrd_file);
-        }
+if ($conn->connect_errno) {
+    die('Connection Failed: ' . $conn->connect_errno);
+}
+
+$conn->set_charset('utf8');
+$conn->autocommit(FALSE);
+$stmt = $conn->prepare('SELECT id, rrd_name, hostname, start_time, duration, devices_disk, devices_net, created_at FROM rrd ORDER BY id');
+$stmt->execute();
+$stmt->bind_result($id, $rrd_name, $hostname, $start_time, $duration, $devices_disk, $devices_net, $created_at);
+
+while ($stmt->fetch()) {
+    $disks = preg_split('/,/', $devices_disk);
+    $nets = preg_split('/,/', $devices_net);
+?>
+          <tr>
+            <td><input type="checkbox" name="ids[]" value="<?php echo htmlspecialchars($id); ?>" /><?php echo htmlspecialchars($id); ?></td>
+            <td><?php echo htmlspecialchars($rrd_name); ?></td>
+            <td><?php echo htmlspecialchars($hostname); ?></td>
+            <td><?php echo htmlspecialchars($start_time); ?></td>
+            <td><?php echo htmlspecialchars($duration); ?></td>
+            <td>
+              <input type="radio" name="disk<?php echo htmlspecialchars($id); ?>" value="total" checked />total
+<?php
+    foreach ($disks as $disk) {
+?>
+              <input type="radio" name="disk<?php echo htmlspecialchars($id); ?>" value="<?php echo htmlspecialchars($disk); ?>" /><?php echo htmlspecialchars($disk); ?>
+              
+<?php
     }
-    
-    closedir($handle);
+?>
+            </td>
+            <td>
+              <input type="radio" name="net<?php echo htmlspecialchars($id); ?>" value="total" checked />total
+<?php
+    foreach ($nets as $net) {
+?>
+              <input type="radio" name="net<?php echo htmlspecialchars($id); ?>" value="<?php echo htmlspecialchars($net); ?>" /><?php echo htmlspecialchars($net); ?>
+              
+<?php
+    }
+?>
+            </td>
+            <td><?php echo htmlspecialchars($created_at); ?></td>
+          </tr>
+          <input type="hidden" name="rrd<?php echo htmlspecialchars($id); ?>" value="<?php echo htmlspecialchars($rrd_name); ?>" />
+          <input type="hidden" name="host<?php echo htmlspecialchars($id); ?>" value="<?php echo htmlspecialchars($hostname); ?>" />
+<?php
 }
 
-sort($rrd_list);
-
-foreach ($rrd_list as $rrd_file) {
-    $mtime = filemtime("$rrds_dir/$rrd_file");
+$stmt->close();
+$conn->rollback();
+$conn->close();
 ?>
-        <label for="<?php echo $rrd_file; ?>">
-          <input type="checkbox" name="csv_files[]" value="<?php echo $rrd_file; ?>" id="<?php echo $rrd_file; ?>" />
-          <?php echo $rrd_file; ?> (<?php echo date('Y/m/d H:i:s', $mtime); ?>)
-        </label>
-        <br />
-<?php 
-}
-?>
+        </table>
+        Width<input type="text" name="width" value="512" /><br />
+        Height<input type="text" name="height" value="192" /><br />
+        Disk I/O upper limit<input type="text" name="disk_limit" value="0" /> (Bytes/sec)<br />
+        Network I/O upper limit<input type="text" name="net_limit" value="0" /> (Bytes/sec)<br />
         <label for="aggregate">
           <input type="radio" name="switch" value="aggregate" id="aggregate" checked />
           Aggregate
         </label>
         <label for="delete">
           <input type="radio" name="switch" value="delete" id="delete" />
-          Delete(まだ)
+          Delete
         </label>
         <br />
         <input type="submit" value="Submit" />

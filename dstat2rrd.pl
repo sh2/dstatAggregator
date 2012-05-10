@@ -3,6 +3,7 @@
 use strict;
 use warnings;
 
+use DBI qw/:sql_types/;
 use File::Basename;
 use File::Copy;
 use File::Path;
@@ -21,7 +22,7 @@ my $report_dir = 'rrds';
 my $epoch = 978274800; # 2001/01/01 00:00:00
 my $rrd_file = '/dev/shm/dstat2rrd/' . &random_str() . '.rrd';
 
-my ($hostname, $year, @data, %index_disk, %index_cpu, %index_net);
+my ($hostname, $year, @data, %index_disk, %index_cpu, %index_net, $rrd_id);
 my ($start_time, $end_time) = (0, 0);
 my ($procs_max, $procs_new_max, $memory_max, $paging_max) = (0, 0, 0, 0);
 my ($disk_max, $interrupts_max, $cswitches_max, $net_max) = (0, 0, 0, 0);
@@ -30,6 +31,7 @@ my ($disk_max, $interrupts_max, $cswitches_max, $net_max) = (0, 0, 0, 0);
 &create_rrd();
 &update_rrd();
 &create_dir();
+&insert_db();
 &move_rrd();
 
 sub load_csv {
@@ -423,10 +425,54 @@ sub create_dir {
     }
 }
 
-sub move_rrd {
-    print STDERR "${report_dir}/${rrd_name}.rrd\n";
+sub insert_db {
+    my ($sec, $min, $hour, $mday, $mon, $year) = localtime($start_time);
     
-    if (!move($rrd_file, "${report_dir}/${rrd_name}.rrd")) {
+    my $start_time_str = sprintf("%04d-%02d-%02d %02d:%02d:%02d",
+        $year + 1900, $mon + 1, $mday, $hour, $min, $sec); 
+    
+    my $devices_disk = join(',', sort keys %index_disk);
+    my $devices_net = join(',', sort keys %index_net);
+    
+    my $dbh;
+    
+    eval {
+        $dbh = DBI->connect('DBI:mysql:rstat;mysql_server_prepare=1', 'rstat', 'rstat', { RaiseError => 1, PrintError => 0, AutoCommit => 0 });
+        my $sth = $dbh->prepare_cached(q{INSERT INTO rrd (rrd_name, hostname, start_time, duration, devices_disk, devices_net, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())});
+        
+        $sth->bind_param(1, $rrd_name, SQL_VARCHAR);
+        $sth->bind_param(2, $hostname, SQL_VARCHAR);
+        $sth->bind_param(3, $start_time_str, SQL_DATETIME);
+        $sth->bind_param(4, $end_time - $start_time, SQL_INTEGER);
+        $sth->bind_param(5, $devices_disk, SQL_VARCHAR);
+        $sth->bind_param(6, $devices_net, SQL_VARCHAR);
+        
+        $sth->execute();
+        $rrd_id = $sth->{'mysql_insertid'};
+        $sth->finish();
+        $dbh->commit();
+        $dbh->disconnect();
+    };
+    
+    if ($@) {
+        my $message = $@;
+        
+        if ($dbh) {
+            eval {
+                $dbh->rollback();
+            };
+            eval {
+                $dbh->disconnect();
+            };
+        }
+        
+        &delete_rrd();
+        die $message;
+    }
+}
+
+sub move_rrd {
+    if (!move($rrd_file, sprintf("${report_dir}/%05d_${rrd_name}.rrd", $rrd_id))) {
         &delete_rrd();
         die $!;
     }

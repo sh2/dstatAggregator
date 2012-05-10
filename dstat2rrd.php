@@ -11,7 +11,7 @@ if (is_uploaded_file($_FILES['csv_file']['tmp_name'])) {
         $output, $return_var);
     
     if ($return_var == 0) {
-        header("Location: index.php");
+        header("Location: .");
         exit();
     } else {
         foreach ($output as $line) {
