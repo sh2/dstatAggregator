@@ -93,7 +93,7 @@ if ($_POST['switch'] === 'aggregate') {
   </head>
   <body>
     <p>
-<?php print $message; ?>
+<?php echo $message; ?>
     </p>
   </body>
 </html>
