@@ -4,6 +4,7 @@ use strict;
 use warnings;
 
 use File::Path;
+use POSIX qw/floor/;
 use RRDs;
 
 if ($#ARGV < 5) {
@@ -53,6 +54,7 @@ sub create_dir {
 
 sub create_graph {
     my (@template, @options);
+    my $window = (floor((&get_lastupdate() - $epoch) / 3600) + 1) * 60;
     my $color;
     
     # Template
@@ -95,6 +97,29 @@ sub create_graph {
         die $error;
     }
     
+    # CPU user average
+    @options = @template;
+    $color = 0;
+    
+    push @options, '--upper-limit';
+    push @options, 100;
+    
+    push @options, '--title';
+    push @options, 'CPU Usage user average (%)';
+    
+    foreach my $entry (@entries) {
+        push @options, "DEF:USR_$entry->{'host'}=$entry->{'file'}:CPU_USR:AVERAGE";
+        push @options, "CDEF:USR_AVG_$entry->{'host'}=USR_$entry->{'host'},${window},TREND";
+        push @options, "LINE1:USR_AVG_$entry->{'host'}#${colors[${color}]}:$entry->{'host'}_${window}sec";
+        $color++;
+    }
+    
+    RRDs::graph("${report_dir}/cpu_u_avg.png", @options);
+    
+    if (my $error = RRDs::error) {
+        die $error;
+    }
+    
     # CPU user+system
     @options = @template;
     $color = 0;
@@ -114,6 +139,31 @@ sub create_graph {
     }
     
     RRDs::graph("${report_dir}/cpu_us.png", @options);
+    
+    if (my $error = RRDs::error) {
+        die $error;
+    }
+    
+    # CPU user+system average
+    @options = @template;
+    $color = 0;
+    
+    push @options, '--upper-limit';
+    push @options, 100;
+    
+    push @options, '--title';
+    push @options, 'CPU Usage user+system average (%)';
+    
+    foreach my $entry (@entries) {
+        push @options, "DEF:USR_$entry->{'host'}=$entry->{'file'}:CPU_USR:AVERAGE";
+        push @options, "DEF:SYS_$entry->{'host'}=$entry->{'file'}:CPU_SYS:AVERAGE";
+        push @options, "CDEF:US_$entry->{'host'}=USR_$entry->{'host'},SYS_$entry->{'host'},+";
+        push @options, "CDEF:US_AVG_$entry->{'host'}=US_$entry->{'host'},${window},TREND";
+        push @options, "LINE1:US_AVG_$entry->{'host'}#${colors[${color}]}:$entry->{'host'}_${window}sec";
+        $color++;
+    }
+    
+    RRDs::graph("${report_dir}/cpu_us_avg.png", @options);
     
     if (my $error = RRDs::error) {
         die $error;
@@ -145,6 +195,33 @@ sub create_graph {
         die $error;
     }
     
+    # CPU user+system+hardirq+softirq average
+    @options = @template;
+    $color = 0;
+    
+    push @options, '--upper-limit';
+    push @options, 100;
+    
+    push @options, '--title';
+    push @options, 'CPU Usage user+system+hardirq+softirq average (%)';
+    
+    foreach my $entry (@entries) {
+        push @options, "DEF:USR_$entry->{'host'}=$entry->{'file'}:CPU_USR:AVERAGE";
+        push @options, "DEF:SYS_$entry->{'host'}=$entry->{'file'}:CPU_SYS:AVERAGE";
+        push @options, "DEF:HIQ_$entry->{'host'}=$entry->{'file'}:CPU_HIQ:AVERAGE";
+        push @options, "DEF:SIQ_$entry->{'host'}=$entry->{'file'}:CPU_SIQ:AVERAGE";
+        push @options, "CDEF:USHS_$entry->{'host'}=USR_$entry->{'host'},SYS_$entry->{'host'},+,HIQ_$entry->{'host'},+,SIQ_$entry->{'host'},+";
+        push @options, "CDEF:USHS_AVG_$entry->{'host'}=USHS_$entry->{'host'},${window},TREND";
+        push @options, "LINE1:USHS_AVG_$entry->{'host'}#${colors[${color}]}:$entry->{'host'}_${window}sec";
+        $color++;
+    }
+    
+    RRDs::graph("${report_dir}/cpu_ushs_avg.png", @options);
+    
+    if (my $error = RRDs::error) {
+        die $error;
+    }
+    
     # CPU user+system+hardirq+softirq+wait
     @options = @template;
     $color = 0;
@@ -167,6 +244,34 @@ sub create_graph {
     }
     
     RRDs::graph("${report_dir}/cpu_ushsw.png", @options);
+    
+    if (my $error = RRDs::error) {
+        die $error;
+    }
+    
+    # CPU user+system+hardirq+softirq+wait average
+    @options = @template;
+    $color = 0;
+    
+    push @options, '--upper-limit';
+    push @options, 100;
+    
+    push @options, '--title';
+    push @options, 'CPU Usage user+system+hardirq+softirq+wait average (%)';
+    
+    foreach my $entry (@entries) {
+        push @options, "DEF:USR_$entry->{'host'}=$entry->{'file'}:CPU_USR:AVERAGE";
+        push @options, "DEF:SYS_$entry->{'host'}=$entry->{'file'}:CPU_SYS:AVERAGE";
+        push @options, "DEF:HIQ_$entry->{'host'}=$entry->{'file'}:CPU_HIQ:AVERAGE";
+        push @options, "DEF:SIQ_$entry->{'host'}=$entry->{'file'}:CPU_SIQ:AVERAGE";
+        push @options, "DEF:WAI_$entry->{'host'}=$entry->{'file'}:CPU_WAI:AVERAGE";
+        push @options, "CDEF:USHSW_$entry->{'host'}=USR_$entry->{'host'},SYS_$entry->{'host'},+,HIQ_$entry->{'host'},+,SIQ_$entry->{'host'},+,WAI_$entry->{'host'},+";
+        push @options, "CDEF:USHSW_AVG_$entry->{'host'}=USHSW_$entry->{'host'},${window},TREND";
+        push @options, "LINE1:USHSW_AVG_$entry->{'host'}#${colors[${color}]}:$entry->{'host'}_${window}sec";
+        $color++;
+    }
+    
+    RRDs::graph("${report_dir}/cpu_ushsw_avg.png", @options);
     
     if (my $error = RRDs::error) {
         die $error;
@@ -204,6 +309,39 @@ sub create_graph {
         die $error;
     }
     
+    # Disk read average
+    @options = @template;
+    $color = 0;
+    
+    if ($disk_limit != 0) {
+        push @options, '--upper-limit';
+        push @options, $disk_limit;
+    }
+    
+    push @options, '--base';
+    push @options, 1024;
+    
+    push @options, '--title';
+    push @options, 'Disk read average (Bytes/sec)';
+    
+    foreach my $entry (@entries) {
+        if ($entry->{'disk'} eq 'total') {
+            push @options, "DEF:READ_$entry->{'host'}=$entry->{'file'}:DISK_READ:AVERAGE";
+        } else {
+            push @options, "DEF:READ_$entry->{'host'}=$entry->{'file'}:DISK_$entry->{'disk'}_READ:AVERAGE";
+        }
+        
+        push @options, "CDEF:READ_AVG_$entry->{'host'}=READ_$entry->{'host'},${window},TREND";
+        push @options, "LINE1:READ_AVG_$entry->{'host'}#${colors[${color}]}:$entry->{'host'}_$entry->{'disk'}_${window}sec";
+        $color++;
+    }
+    
+    RRDs::graph("${report_dir}/disk_read_avg.png", @options);
+    
+    if (my $error = RRDs::error) {
+        die $error;
+    }
+    
     # Disk write
     @options = @template;
     $color = 0;
@@ -231,6 +369,39 @@ sub create_graph {
     }
     
     RRDs::graph("${report_dir}/disk_write.png", @options);
+    
+    if (my $error = RRDs::error) {
+        die $error;
+    }
+    
+    # Disk write average
+    @options = @template;
+    $color = 0;
+    
+    if ($disk_limit != 0) {
+        push @options, '--upper-limit';
+        push @options, $disk_limit;
+    }
+    
+    push @options, '--base';
+    push @options, 1024;
+    
+    push @options, '--title';
+    push @options, 'Disk write average (Bytes/sec)';
+    
+    foreach my $entry (@entries) {
+        if ($entry->{'disk'} eq 'total') {
+            push @options, "DEF:WRIT_$entry->{'host'}=$entry->{'file'}:DISK_WRIT:AVERAGE";
+        } else {
+            push @options, "DEF:WRIT_$entry->{'host'}=$entry->{'file'}:DISK_$entry->{'disk'}_WRIT:AVERAGE";
+        }
+        
+        push @options, "CDEF:WRIT_AVG_$entry->{'host'}=WRIT_$entry->{'host'},${window},TREND";
+        push @options, "LINE1:WRIT_AVG_$entry->{'host'}#${colors[${color}]}:$entry->{'host'}_$entry->{'disk'}_${window}sec";
+        $color++;
+    }
+    
+    RRDs::graph("${report_dir}/disk_write_avg.png", @options);
     
     if (my $error = RRDs::error) {
         die $error;
@@ -268,6 +439,39 @@ sub create_graph {
         die $error;
     }
     
+    # Network recieve average
+    @options = @template;
+    $color = 0;
+    
+    if ($net_limit != 0) {
+        push @options, '--upper-limit';
+        push @options, $net_limit;
+    }
+    
+    push @options, '--base';
+    push @options, 1024;
+    
+    push @options, '--title';
+    push @options, 'Network recieve average (Bytes/sec)';
+    
+    foreach my $entry (@entries) {
+        if ($entry->{'net'} eq 'total') {
+            push @options, "DEF:RECV_$entry->{'host'}=$entry->{'file'}:NET_RECV:AVERAGE";
+        } else {
+            push @options, "DEF:RECV_$entry->{'host'}=$entry->{'file'}:NET_$entry->{'net'}_RECV:AVERAGE";
+        }
+        
+        push @options, "CDEF:RECV_AVG_$entry->{'host'}=RECV_$entry->{'host'},${window},TREND";
+        push @options, "LINE1:RECV_AVG_$entry->{'host'}#${colors[${color}]}:$entry->{'host'}_$entry->{'net'}_${window}sec";
+        $color++;
+    }
+    
+    RRDs::graph("${report_dir}/net_recieve_avg.png", @options);
+    
+    if (my $error = RRDs::error) {
+        die $error;
+    }
+    
     # Network send
     @options = @template;
     $color = 0;
@@ -295,6 +499,39 @@ sub create_graph {
     }
     
     RRDs::graph("${report_dir}/net_send.png", @options);
+    
+    if (my $error = RRDs::error) {
+        die $error;
+    }
+    
+    # Network send average
+    @options = @template;
+    $color = 0;
+    
+    if ($net_limit != 0) {
+        push @options, '--upper-limit';
+        push @options, $net_limit;
+    }
+    
+    push @options, '--base';
+    push @options, 1024;
+    
+    push @options, '--title';
+    push @options, 'Network send average (Bytes/sec)';
+    
+    foreach my $entry (@entries) {
+        if ($entry->{'net'} eq 'total') {
+            push @options, "DEF:SEND_$entry->{'host'}=$entry->{'file'}:NET_SEND:AVERAGE";
+        } else {
+            push @options, "DEF:SEND_$entry->{'host'}=$entry->{'file'}:NET_$entry->{'net'}_SEND:AVERAGE";
+        }
+        
+        push @options, "CDEF:SEND_AVG_$entry->{'host'}=SEND_$entry->{'host'},${window},TREND";
+        push @options, "LINE1:SEND_AVG_$entry->{'host'}#${colors[${color}]}:$entry->{'host'}_$entry->{'net'}_${window}sec";
+        $color++;
+    }
+    
+    RRDs::graph("${report_dir}/net_send_avg.png", @options);
     
     if (my $error = RRDs::error) {
         die $error;
@@ -346,29 +583,36 @@ sub create_html {
         <div class="span9">
           <div class="hero-unit">
             <h1>dstatAggregator</h1>
-            <ul>
           </div>
           <h2>CPU Usage</h2>
           <h3 id="cpu_u">CPU Usage user</h3>
           <p><img src="cpu_u.png" alt="CPU Usage user" /></p>
+          <p><img src="cpu_u_avg.png" alt="CPU Usage user average" /></p>
           <h3 id="cpu_us">CPU Usage user+system</h3>
           <p><img src="cpu_us.png" alt="CPU Usage user+system" /></p>
+          <p><img src="cpu_us_avg.png" alt="CPU Usage user+system average" /></p>
           <h3 id="cpu_ushs">CPU Usage user+system+hardirq+softirq</h3>
           <p><img src="cpu_ushs.png" alt="CPU Usage user+system+hardirq+softirq" /></p>
+          <p><img src="cpu_ushs_avg.png" alt="CPU Usage user+system+hardirq+softirq average" /></p>
           <h3 id="cpu_ushsw">CPU Usage user+system+hardirq+softirq+wait</h3>
           <p><img src="cpu_ushsw.png" alt="CPU Usage user+system+hardirq+softirq+wait" /></p>
+          <p><img src="cpu_ushsw_avg.png" alt="CPU Usage user+system+hardirq+softirq+wait average" /></p>
           <hr />
           <h2>Disk I/O</h2>
           <h3 id="disk_read">Disk read</h3>
           <p><img src="disk_read.png" alt="Disk read" /></p>
+          <p><img src="disk_read_avg.png" alt="Disk read average" /></p>
           <h3 id="disk_write">Disk write</h3>
           <p><img src="disk_write.png" alt="Disk write" /></p>
+          <p><img src="disk_write_avg.png" alt="Disk write average" /></p>
           <hr />
           <h2>Network I/O</h2>
           <h3 id="net_recieve">Network recieve</h3>
           <p><img src="net_recieve.png" alt="Network recieve" /></p>
+          <p><img src="net_recieve_avg.png" alt="Network recieve average" /></p>
           <h3 id="net_send">Network send</h3>
           <p><img src="net_send.png" alt="Network send" /></p>
+          <p><img src="net_send_avg.png" alt="Network send average" /></p>
         </div>
       </div>
       <hr />
